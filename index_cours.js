@@ -1,11 +1,12 @@
 const { response, request } = require('express');
 var express = require('express');
 var app = express();
+var mysql2 = require('mysql2');
 
 // Appel du module router person.js
 var person = require('./routes/person');
-var bodyParser = require('body-parser');
 
+var bodyParser = require('body-parser');
 
 // Déclaration de vues Embedded Javascript (EJS)
 app.set('engine_view', 'ejs');
@@ -15,16 +16,161 @@ app.set('engine_view', 'ejs');
 // accessible via req.body
 app.use(bodyParser.urlencoded({ extended: false }));
 
-app.get('/forms', (req, res) =>{
+
+// //////////////////////////////////////////////
+
+
+// Préparation de la connection à la db formation
+// par l'utilisation du module installé mysql2
+var db = mysql2.createConnection({
+    host: 'localhost',
+    user: 'root',
+    password: 'root',
+    database: 'formation'
+});
+
+
+// connection à la db formation
+db.connect((err) => {
+    if (err) {
+        throw err;
+    }
+    console.log('Connected to database');
+});
+
+// l'objet global nous donne une portée (scope) dans l'ensemble du projet
+global.db = db;
+
+app.use('/assets/css', express.static(__dirname + '/node_modules/bootstrap/dist/css'));
+
+db.query('Select * from personne', function (
+    err, rows) {
+    if (err) throw (err);
+    for (i = 0; i < rows.length; i++)
+        console.log(rows[i].prenom + " " + rows[i].nom);
+});
+
+
+
+// A l'appel de la route http://localhost:8080/forms
+// nous affichons dans la vue forms.ejs la liste des personnes
+//récupérée dans la db formation
+app.get('/forms', (req, res) => {
+
+    // création de la requête
+    let query = "Select * from personne";
+
+    // appel de la méthode query() prenant en parametre la requête ici query
+    // et une méthode callback nous retournant soit une erreur soit le résultat
+    db.query(query, (err, result) => {
+        if (err) {
+            res.redirect('/forms')
+        }
+
+        // Renvoie vers la vue forms.ejs avec une variable personList
+        // stockant le résultat recupéré du callback
+        res.render('forms.ejs', {
+            personList: result,
+            txtId: '',
+            txtNom: '',
+            txtPrenom: '',
+        });
+    });
+});
+
+
+
+
+
+// //////////////////////////////////////////////
+
+
+
+app.get('/forms', (req, res) => {
     res.render('forms.ejs');
 });
 
-app.post('/', (req, res) =>{
+app.post('/', (req, res) => {
     res.render('presentation.ejs', {
-        prenom : req.body.prenom,
-        nom : req.body.nom
+        prenom: req.body.prenom,
+        nom: req.body.nom
     });
 });
+
+app.post('/ajoutPersonne', (req, res) => {
+
+    // var data = {
+    //     nom: req.body.txtNom,
+    //     prenom: req.body.txtPrenom
+    // };
+
+    // db.query("Insert into personne set ?", data,
+    //     function (err, rows) {
+    //         if (err) throw err;
+    //         console.log("Insertion reussie");
+    //         res.redirect('/forms');
+    //     });
+
+    if (req.body.txtId == 0) {
+        var data = {
+            nom: req.body.txtNom,
+            prenom: req.body.txtPrenom
+        };
+        db.query("Insert into personne set ? ", data,
+            function (err, rows) {
+                if (err) throw err;
+                console.log("Insertion reussie");
+                res.redirect('/forms');
+            });
+    }
+    else {
+        var data = {
+            id: req.body.txtId,
+            nom: req.body.txtNom,
+            prenom: req.body.txtPrenom
+        };
+        db.query('UPDATE personne SET ? WHERE id = ' + data.id, data,
+            function (err, rows) {
+                if (err) throw err;
+                console.log("Mise à jour reussie");
+                res.redirect('/forms');
+            });
+    }
+});
+
+app.get('/editPersonne/:id', (req, res) => {
+
+    var id = req.params.id;
+
+
+    db.query('SELECT * FROM personne WHERE id = "' + id + '"',
+        function (err, rows) {
+            if (err) throw err;
+
+            res.render('forms.ejs', {
+                personList: [],
+                txtId: rows[0].id,
+                txtNom: rows[0].nom,
+                txtPrenom: rows[0].prenom,
+            });
+        });
+});
+
+
+app.get('/deletePersonne/:id', (req, res) => {
+
+    var id = req.params.id;
+
+    db.query('DELETE FROM personne WHERE id = "' + id + '"',
+        function (err, rows) {
+            if (err) throw err;
+            console.log("Suppression reussie");
+            res.redirect('/forms');
+        });
+});
+
+
+
 
 
 // Appel des routes déclarées dans person,js à partir de la route /person
